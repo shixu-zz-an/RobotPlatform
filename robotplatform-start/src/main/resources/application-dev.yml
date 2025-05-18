@@ -1,0 +1,33 @@
+server:
+  port: 8080
+  servlet:
+    context-path: /robotplatform
+
+spring:
+  application:
+    name: robotplatform
+
+# 机器人AI配置
+robotplatform:
+  # FunASR配置
+  funasr:
+    serverUrl: ws://100.91.84.27:10096
+    heartbeatInterval: 30
+
+  # CosyVoice配置
+  cosyvoice:
+    server:
+      host: 100.103.248.120
+      port: 50000
+    voice:
+      id: 1
+
+  # Ollama配置
+  ollama:
+    server:
+      url: http://100.91.84.27:11434
+    model: qwen2.5:14b
+    timeout:
+      seconds: 60
+  audio:
+    save-dir: audio_records  # 音频文件保存目录      

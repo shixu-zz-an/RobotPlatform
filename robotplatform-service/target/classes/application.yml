@@ -1,0 +1,7 @@
+robotplatform:
+  user:
+    service:
+      base-url: http://your-api-server
+      timeout: 5000
+      cache:
+        expire: 300  # 缓存过期时间（秒） 

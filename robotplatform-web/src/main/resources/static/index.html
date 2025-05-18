@@ -1,0 +1,979 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RobotPlatform语音对话</title>
+    <style>
+        body {
+            font-family: 'Arial', sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+
+        h1 {
+            color: #333;
+            text-align: center;
+        }
+
+        .chat-container {
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            padding: 20px;
+            margin-bottom: 20px;
+            max-height: 500px;
+            overflow-y: auto;
+        }
+
+        .message {
+            margin-bottom: 15px;
+            padding: 10px;
+            border-radius: 5px;
+            position: relative;
+        }
+
+        .user-message {
+            background-color: #e3f2fd;
+            text-align: right;
+            margin-left: 60px;
+        }
+
+        .robot-message {
+            background-color: #f1f1f1;
+            margin-right: 60px;
+        }
+
+        .transcription-message {
+            background-color: #e8f5e9;
+            font-style: italic;
+            margin-left: 60px;
+            text-align: right;
+            font-size: 0.9em;
+        }
+
+        .error-message {
+            background-color: #ffebee;
+            color: #c62828;
+            font-weight: bold;
+        }
+
+        .system-message {
+            background-color: #fff8e1;
+            color: #ff8f00;
+            text-align: center;
+            font-style: italic;
+            padding: 5px 10px;
+            margin: 10px 0;
+        }
+
+        .message-time {
+            font-size: 0.7em;
+            color: #757575;
+            margin-top: 5px;
+        }
+
+        .control-container {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .button-group {
+            display: flex;
+            gap: 10px;
+        }
+
+        button {
+            padding: 10px 15px;
+            border: none;
+            border-radius: 5px;
+            color: white;
+            cursor: pointer;
+            font-size: 16px;
+            flex: 1;
+        }
+
+        .primary-btn {
+            background-color: #1976d2;
+        }
+
+        .primary-btn:hover {
+            background-color: #1565c0;
+        }
+
+        .danger-btn {
+            background-color: #e53935;
+        }
+
+        .danger-btn:hover {
+            background-color: #c62828;
+        }
+
+        button:disabled {
+            background-color: #bbdefb;
+            cursor: not-allowed;
+        }
+
+        .status {
+            text-align: center;
+            margin-top: 10px;
+            font-style: italic;
+            color: #666;
+        }
+
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(0, 0, 0, 0.1);
+            border-radius: 50%;
+            border-top-color: #1976d2;
+            animation: spin 1s ease-in-out infinite;
+            margin-left: 5px;
+        }
+
+        .message-avatar {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            position: absolute;
+            top: 10px;
+        }
+
+        .user-avatar {
+            right: -50px;
+            background-color: #bbdefb;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #1976d2;
+            font-weight: bold;
+        }
+
+        .robot-avatar {
+            left: -50px;
+            background-color: #c8e6c9;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #388e3c;
+            font-weight: bold;
+        }
+
+        .text-input-container {
+            display: flex;
+            gap: 10px;
+            margin-top: 10px;
+        }
+
+        #textInput {
+            flex: 1;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-size: 16px;
+        }
+
+        #sendTextBtn {
+            background-color: #388e3c;
+        }
+
+        #sendTextBtn:hover {
+            background-color: #2e7d32;
+        }
+
+        .playing-indicator {
+            display: inline-block;
+            margin-left: 10px;
+            color: #1976d2;
+            animation: pulse 1s infinite;
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        @keyframes pulse {
+            0% {
+                opacity: 0.3;
+            }
+
+            50% {
+                opacity: 1;
+            }
+
+            100% {
+                opacity: 0.3;
+            }
+        }
+
+        .session-info {
+            text-align: center;
+            font-size: 0.8em;
+            color: #757575;
+            margin-bottom: 10px;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>RobotPlatform语音对话</h1>
+
+    <div class="session-info" id="sessionInfo"></div>
+
+    <div class="chat-container" id="chatContainer">
+        <div class="message robot-message">
+            您好，我是RobotPlatform，请点击下方按钮开始语音对话。
+            <div class="message-avatar robot-avatar">AI</div>
+        </div>
+    </div>
+
+    <div class="control-container">
+        <div class="button-group">
+            <button id="startBtn" class="primary-btn">开始录音</button>
+            <button id="stopBtn" class="danger-btn" disabled>停止录音</button>
+            <button id="resetBtn" class="danger-btn">重置会话</button>
+        </div>
+        <div class="text-input-container">
+            <input type="text" id="textInput" placeholder="或者输入文字进行对话...">
+            <button id="sendTextBtn" class="primary-btn">发送</button>
+        </div>
+        <div class="status" id="status">未连接</div>
+    </div>
+
+    <script>
+        // 全局变量
+        let websocket = null;
+        let mediaRecorder = null;
+        let audioChunks = [];
+        let sessionId = "voice"; // 使用固定会话ID
+        let currentAudio = null;
+        let isConnecting = false; // 防止重复连接
+        let heartbeatInterval = null; // 心跳计时器
+        let reconnectTimeout = null; // 重连计时器
+        let isAIPlaying = false; // 添加AI播放状态标志
+        let currentAudioSource = null; // 添加当前音频源引用
+        const HEARTBEAT_INTERVAL = 20000; // 发送心跳包的间隔(毫秒)
+        const RECONNECT_INTERVAL = 3000;  // 重连间隔(毫秒)
+
+        // 音频配置
+        const AUDIO_CONFIG = {
+            duration: 600000,  // 最长录音时长，单位：ms
+            sampleRate: 16000,  // 目标采样率
+            numberOfChannels: 1,  // 录音通道数
+            encodeBitRate: 48000,  // 编码码率
+            format: 'PCM',  // 音频格式
+            frameSize: 1,  // 帧大小
+            needFrame: true  // 启用帧录制
+        };
+
+        // 缓冲区大小
+        const CHUNK_SIZE = 1924;  // 每次发送的数据块大小
+
+        // 全局音频流式播放变量
+        let audioContext = null;
+        let audioQueue = [];
+        let isPlaying = false;
+
+        // DOM元素
+        const chatContainer = document.getElementById('chatContainer');
+        const startBtn = document.getElementById('startBtn');
+        const stopBtn = document.getElementById('stopBtn');
+        const resetBtn = document.getElementById('resetBtn');
+        const statusEl = document.getElementById('status');
+        const textInput = document.getElementById('textInput');
+        const sendTextBtn = document.getElementById('sendTextBtn');
+        const sessionInfoEl = document.getElementById('sessionInfo');
+
+        // 更新会话信息
+        function updateSessionInfo() {
+            sessionInfoEl.textContent = `会话ID: ${sessionId}`;
+        }
+
+        // 启动心跳
+        function startHeartbeat() {
+            stopHeartbeat(); // 先停止已有的心跳
+
+            heartbeatInterval = setInterval(() => {
+                if (websocket && websocket.readyState === WebSocket.OPEN) {
+                    // 发送心跳包
+                    console.log('发送心跳包...');
+                    try {
+                        // 使用ping类型消息作为心跳包
+                        sendMessage({
+                            type: 'ping',
+                            sessionId: sessionId,
+                            timestamp: Date.now()
+                        });
+                    } catch (e) {
+                        console.error('发送心跳包失败:', e);
+                    }
+                } else {
+                    console.warn('WebSocket未连接，无法发送心跳包');
+                    reconnectIfNeeded();
+                }
+            }, HEARTBEAT_INTERVAL);
+
+            console.log('心跳机制已启动，间隔:', HEARTBEAT_INTERVAL, 'ms');
+        }
+
+        // 停止心跳
+        function stopHeartbeat() {
+            if (heartbeatInterval) {
+                clearInterval(heartbeatInterval);
+                heartbeatInterval = null;
+                console.log('心跳机制已停止');
+            }
+        }
+
+        // 检查是否需要重连
+        function reconnectIfNeeded() {
+            if (!websocket || websocket.readyState === WebSocket.CLOSED || websocket.readyState === WebSocket.CLOSING) {
+                console.log('检测到WebSocket已断开，准备重连...');
+
+                // 避免多次重连
+                if (!reconnectTimeout && !isConnecting) {
+                    reconnectTimeout = setTimeout(() => {
+                        reconnectTimeout = null;
+                        connectWebSocket();
+                    }, RECONNECT_INTERVAL);
+
+                    console.log('已安排重连任务，将在', RECONNECT_INTERVAL, 'ms后执行');
+                }
+            }
+        }
+
+        // 初始化WebSocket连接
+        function connectWebSocket() {
+            if (isConnecting || (websocket && websocket.readyState === WebSocket.CONNECTING)) {
+                console.log('WebSocket连接已在进行中，避免重复连接');
+                return;
+            }
+
+            if (websocket && websocket.readyState === WebSocket.OPEN) {
+                console.log('WebSocket已连接，无需重新连接');
+                return;
+            }
+
+            // 清理现有连接
+            if (websocket) {
+                try {
+                    websocket.onclose = null; // 移除现有的关闭处理器以避免触发重连
+                    websocket.onerror = null;
+                    websocket.onmessage = null;
+                    websocket.onopen = null;
+                    websocket.close();
+                } catch (e) {
+                    console.error('关闭现有WebSocket连接失败:', e);
+                }
+                websocket = null;
+            }
+
+            isConnecting = true;
+            statusEl.textContent = "正在连接...";
+
+            const wsUrl = `ws://${window.location.host}/robotplatform/ws/voice/${sessionId}`;
+            console.log('正在连接WebSocket:', wsUrl);
+
+            try {
+                websocket = new WebSocket(wsUrl);
+
+                websocket.onopen = function () {
+                    console.log('WebSocket连接已打开');
+                    statusEl.textContent = "已连接";
+                    startBtn.disabled = false;
+                    sendTextBtn.disabled = false;
+                    updateSessionInfo();
+                    isConnecting = false;
+
+                    // 连接成功后启动心跳
+                    startHeartbeat();
+
+                    // 连接成功时发送登录消息
+                    sendMessage({
+                        type: 'connect',
+                        sessionId: sessionId,
+                        timestamp: Date.now()
+                    });
+                };
+
+                websocket.onmessage = function (event) {
+                    console.log('收到WebSocket消息:', event.data);
+                    try {
+                        const message = JSON.parse(event.data);
+
+                        // 处理服务器的pong响应
+                        if (message.type === 'pong') {
+                            console.log('收到心跳响应');
+                            return;
+                        }
+
+                        handleWebSocketMessage(message);
+                    } catch (e) {
+                        console.error('解析消息失败:', e);
+                        addMessage("消息解析失败: " + e.message, "error");
+                    }
+                };
+
+                websocket.onclose = function (event) {
+                    console.log('WebSocket连接关闭, 代码:', event.code, '原因:', event.reason);
+                    statusEl.textContent = "连接已关闭";
+                    startBtn.disabled = false;
+                    stopBtn.disabled = true;
+                    isConnecting = false;
+
+                    // 停止心跳
+                    stopHeartbeat();
+
+                    // 连接关闭时，如果不是主动关闭，则尝试重连
+                    if (event.code !== 1000 && document.visibilityState === 'visible') {
+                        addMessage("连接已断开，正在尝试重新连接...", "system");
+                        reconnectIfNeeded();
+                    }
+                };
+
+                websocket.onerror = function (error) {
+                    console.error('WebSocket错误:', error);
+                    statusEl.textContent = "连接错误";
+                    addMessage("连接错误，正在尝试重新连接", "error");
+                    isConnecting = false;
+
+                    // 连接错误时尝试重连
+                    reconnectIfNeeded();
+                };
+            } catch (e) {
+                console.error('创建WebSocket连接失败:', e);
+                statusEl.textContent = "连接失败";
+                isConnecting = false;
+
+                // 连接出错时尝试重连
+                reconnectIfNeeded();
+            }
+        }
+
+        // 处理WebSocket消息
+        function handleWebSocketMessage(message) {
+            console.log('处理消息:', message);
+
+            if (message.type === 'text') {
+                addMessage(message.text, 'robot'); // 只渲染一次文本
+            } else if (message.type === 'audio') {
+                playPcmChunk(message.audioData); // 只做流式播放，不渲染文本
+            } else if (message.type === 'transcription') {
+                addMessage(message.text, 'transcription');
+            } else if (message.type === 'error') {
+                addMessage(message.errorMessage || "未知错误", 'error');
+            } else {
+                console.warn('未知消息类型:', message.type);
+                console.warn('未知消息类型:', JSON.stringify(message));
+            }
+
+            // 处理完成后更新状态
+            statusEl.textContent = "已连接";
+        }
+
+        function initAudioContext() {
+            if (!audioContext) {
+                audioContext = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 24000 });
+            }
+        }
+
+        function playPcmChunk(base64Audio) {
+            if (!base64Audio) return;
+            initAudioContext();
+            const binaryData = atob(base64Audio);
+            const arrayBuffer = new ArrayBuffer(binaryData.length);
+            const uint8Array = new Uint8Array(arrayBuffer);
+            for (let i = 0; i < binaryData.length; i++) {
+                uint8Array[i] = binaryData.charCodeAt(i);
+            }
+            const int16Array = new Int16Array(arrayBuffer);
+            // 转成Float32
+            const float32Array = new Float32Array(int16Array.length);
+            for (let i = 0; i < int16Array.length; i++) {
+                float32Array[i] = int16Array[i] / 32768.0;
+            }
+            audioQueue.push(float32Array);
+            if (!isPlaying) {
+                playNextChunk();
+            }
+        }
+
+        function playNextChunk() {
+            if (audioQueue.length === 0) {
+                isPlaying = false;
+                isAIPlaying = false;
+                return;
+            }
+            isPlaying = true;
+            isAIPlaying = true;
+            const chunk = audioQueue.shift();
+            const buffer = audioContext.createBuffer(1, chunk.length, 24000);
+            buffer.copyToChannel(chunk, 0);
+            const source = audioContext.createBufferSource();
+            currentAudioSource = source; // 保存当前音频源引用
+            source.buffer = buffer;
+            source.connect(audioContext.destination);
+            source.onended = playNextChunk;
+            source.start();
+        }
+
+        // 添加停止AI播放的函数
+        function stopAIPlayback() {
+            if (currentAudioSource) {
+                try {
+                    currentAudioSource.stop();
+                    currentAudioSource = null;
+                } catch (e) {
+                    console.log('停止音频播放时出错:', e);
+                }
+            }
+            audioQueue = []; // 清空音频队列
+            isPlaying = false;
+            isAIPlaying = false;
+        }
+
+        // 发送WebSocket消息
+        function sendMessage(message) {
+            if (!websocket || websocket.readyState !== WebSocket.OPEN) {
+                // 如果是ping消息且连接未打开，直接忽略
+                if (message.type === 'ping') {
+                    return;
+                }
+
+                console.log('WebSocket未连接，尝试重新连接');
+
+                // 存储消息，连接成功后发送
+                const pendingMessage = message;
+                connectWebSocket();
+
+                // 等待连接建立后发送
+                const maxAttempts = 3;
+                let attempts = 0;
+
+                const checkAndSend = setInterval(() => {
+                    attempts++;
+                    if (websocket && websocket.readyState === WebSocket.OPEN) {
+                        clearInterval(checkAndSend);
+                        console.log('连接已建立，发送延迟消息');
+                        const messageStr = JSON.stringify(pendingMessage);
+                        websocket.send(messageStr);
+                    } else if (attempts >= maxAttempts) {
+                        clearInterval(checkAndSend);
+                        console.error('WebSocket连接失败，无法发送消息');
+                        statusEl.textContent = "连接失败";
+
+                        // 如果不是系统消息，则显示错误提示
+                        if (message.type !== 'connect' && message.type !== 'ping') {
+                            addMessage("无法连接到服务器，请刷新页面重试", "error");
+                        }
+                    }
+                }, 1000);
+
+                return;
+            }
+
+            try {
+                // 跳过特定消息类型的日志（如心跳包）
+                if (message.type !== 'ping') {
+                    console.log('发送消息:', JSON.stringify(message));
+                }
+
+                websocket.send(JSON.stringify(message));
+            } catch (e) {
+                console.error('发送消息失败:', e);
+
+                if (message.type !== 'ping') {
+                    addMessage("发送消息失败: " + e.message, "error");
+                }
+
+                // 发送失败可能是连接已断开，尝试重连
+                reconnectIfNeeded();
+            }
+        }
+
+        // 开始录音
+        async function startRecording() {
+            // 如果AI正在播放，先停止播放
+            if (isAIPlaying) {
+                stopAIPlayback();
+                addMessage("检测到用户开始说话，停止当前播放", "system");
+            }
+
+            if (!websocket || websocket.readyState !== WebSocket.OPEN) {
+                connectWebSocket();
+                addMessage("正在连接服务器...", "system");
+                await new Promise(resolve => setTimeout(resolve, 1000));
+
+                if (!websocket || websocket.readyState !== WebSocket.OPEN) {
+                    addMessage("连接服务器失败，请刷新页面重试", "error");
+                    return;
+                }
+            }
+
+            try {
+                // 设置音频参数
+                const audioConstraints = {
+                    audio: {
+                        channelCount: AUDIO_CONFIG.numberOfChannels,
+                        sampleRate: AUDIO_CONFIG.sampleRate,
+                        echoCancellation: true,
+                        noiseSuppression: true
+                    }
+                };
+
+                const stream = await navigator.mediaDevices.getUserMedia(audioConstraints);
+
+                // 创建AudioContext和ScriptProcessor来处理音频数据
+                const audioContext = new (window.AudioContext || window.webkitAudioContext)({
+                    sampleRate: AUDIO_CONFIG.sampleRate
+                });
+                const audioInput = audioContext.createMediaStreamSource(stream);
+
+                // 创建处理器节点
+                const bufferSize = 4096;
+                const recorder = audioContext.createScriptProcessor(bufferSize, 1, 1);
+
+                // 用于累积音频数据
+                let audioBuffer = new Float32Array(0);
+
+                recorder.onaudioprocess = function (e) {
+                    // 获取音频数据
+                    const buffer = e.inputBuffer.getChannelData(0);
+
+                    // 将新的音频数据与先前的数据合并
+                    const newBuffer = new Float32Array(audioBuffer.length + buffer.length);
+                    newBuffer.set(audioBuffer);
+                    newBuffer.set(buffer, audioBuffer.length);
+
+                    // 当累积的数据量超过阈值时发送
+                    if (newBuffer.length >= CHUNK_SIZE) {
+                        // 发送CHUNK_SIZE长度的数据
+                        const chunkToSend = newBuffer.slice(0, CHUNK_SIZE);
+
+                        // 保留剩余的数据
+                        const remaining = newBuffer.slice(CHUNK_SIZE);
+
+                        // 将Float32数据转换为16位整数格式
+                        const pcmData = new Int16Array(CHUNK_SIZE);
+                        for (let i = 0; i < CHUNK_SIZE; i++) {
+                            // 将-1.0 ~ 1.0的浮点数转换为-32768 ~ 32767的整数
+                            const s = Math.max(-1, Math.min(1, chunkToSend[i]));
+                            pcmData[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+                        }
+
+                        // 将Int16Array转换为Blob
+                        const wavBlob = new Blob([pcmData], { type: 'application/octet-stream' });
+
+                        // 转换为Base64并发送
+                        const reader = new FileReader();
+                        reader.readAsDataURL(wavBlob);
+                        reader.onloadend = function () {
+                            const base64data = reader.result.split(',')[1];
+
+                            sendMessage({
+                                type: 'audio',
+                                audioData: base64data,
+                                sessionId: sessionId,
+                                timestamp: Date.now()
+                            });
+                        };
+
+                        // 更新缓冲区为剩余数据
+                        audioBuffer = remaining;
+                    } else {
+                        // 否则，更新缓冲区
+                        audioBuffer = newBuffer;
+                    }
+                };
+
+                // 连接录音处理链
+                audioInput.connect(recorder);
+                recorder.connect(audioContext.destination);
+
+                // 保存流和上下文以便后续停止
+                mediaRecorder = {
+                    stream: stream,
+                    audioContext: audioContext,
+                    recorder: recorder,
+                    audioInput: audioInput,
+                    isRecording: true
+                };
+
+                startBtn.disabled = true;
+                stopBtn.disabled = false;
+                statusEl.textContent = "正在录音...";
+
+                addMessage("正在录音...", "user");
+            } catch (error) {
+                console.error('无法访问麦克风:', error);
+                statusEl.textContent = "无法访问麦克风";
+                addMessage("无法访问麦克风，请确保已授予麦克风权限", "error");
+            }
+        }
+
+        // 停止录音
+        function stopRecording() {
+            if (mediaRecorder && mediaRecorder.isRecording) {
+                // 断开处理器节点
+                mediaRecorder.audioInput.disconnect();
+                mediaRecorder.recorder.disconnect();
+
+                // 关闭音频上下文
+                if (mediaRecorder.audioContext.state !== 'closed') {
+                    mediaRecorder.audioContext.close();
+                }
+
+                // 停止所有轨道
+                mediaRecorder.stream.getTracks().forEach(track => track.stop());
+
+                // 更新状态
+                mediaRecorder.isRecording = false;
+
+                startBtn.disabled = false;
+                stopBtn.disabled = true;
+                statusEl.innerHTML = "处理中... <span class='loading'></span>";
+
+                // 发送结束录音信号
+                sendMessage({
+                    type: 'end_audio',
+                    sessionId: sessionId,
+                    timestamp: Date.now()
+                });
+            }
+        }
+
+        // 发送文本消息
+        function sendTextMessage() {
+            const text = textInput.value.trim();
+            if (text) {
+                addMessage(text, "user");
+
+                sendMessage({
+                    type: 'text',
+                    text: text,
+                    sessionId: sessionId,
+                    timestamp: Date.now()
+                });
+
+                textInput.value = '';
+                statusEl.innerHTML = "处理中... <span class='loading'></span>";
+            }
+        }
+
+        // 重置会话
+        function resetSession() {
+            // 停止心跳
+            stopHeartbeat();
+
+            // 取消重连计划
+            if (reconnectTimeout) {
+                clearTimeout(reconnectTimeout);
+                reconnectTimeout = null;
+            }
+
+            // 关闭现有连接
+            if (websocket) {
+                try {
+                    websocket.onclose = null; // 移除关闭处理器以避免触发重连
+                    websocket.close(1000, "用户重置会话");
+                } catch (e) {
+                    console.error('关闭WebSocket连接失败:', e);
+                }
+                websocket = null;
+            }
+
+            // 停止录音
+            if (mediaRecorder && mediaRecorder.isRecording) {
+                stopRecording();
+            }
+
+            // 清空聊天记录
+            chatContainer.innerHTML = `
+                <div class="message robot-message">
+                    您好，我是RobotPlatform，请点击下方按钮开始新的语音对话。
+                    <div class="message-avatar robot-avatar">AI</div>
+                </div>
+            `;
+
+            // 更新状态
+            statusEl.textContent = "已重置连接";
+
+            // 延迟一下再重新连接
+            setTimeout(() => {
+                connectWebSocket();
+            }, 500);
+        }
+
+        // 播放音频
+        function playAudio(base64Audio) {
+            if (!base64Audio) {
+                console.error('无效的音频数据');
+                return;
+            }
+
+            // 如果有正在播放的音频，先停止
+            if (currentAudio && !currentAudio.paused) {
+                currentAudio.pause();
+            }
+
+            try {
+                // 解码Base64音频数据
+                const binaryData = atob(base64Audio);
+                const arrayBuffer = new ArrayBuffer(binaryData.length);
+                const uint8Array = new Uint8Array(arrayBuffer);
+                for (let i = 0; i < binaryData.length; i++) {
+                    uint8Array[i] = binaryData.charCodeAt(i);
+                }
+
+                // 创建AudioContext
+                const audioContext = new (window.AudioContext || window.webkitAudioContext)({
+                    sampleRate: 24000 // 设置采样率为24000Hz
+                });
+
+                // 创建音频源
+                const audioBuffer = audioContext.createBuffer(1, uint8Array.length / 2, 24000);
+                const channelData = audioBuffer.getChannelData(0);
+
+                // 将16位PCM数据转换为32位浮点数
+                const int16Array = new Int16Array(arrayBuffer);
+                for (let i = 0; i < int16Array.length; i++) {
+                    channelData[i] = int16Array[i] / 32768.0;
+                }
+
+                // 创建音频源并播放
+                const source = audioContext.createBufferSource();
+                source.buffer = audioBuffer;
+                source.connect(audioContext.destination);
+
+                // 添加播放指示器
+                const lastRobotMessage = chatContainer.querySelector('.robot-message:last-child');
+                if (lastRobotMessage) {
+                    const indicator = document.createElement('span');
+                    indicator.className = 'playing-indicator';
+                    indicator.textContent = '🔊 正在播放...';
+                    lastRobotMessage.appendChild(indicator);
+
+                    source.onended = function () {
+                        // 移除播放指示器
+                        if (lastRobotMessage.contains(indicator)) {
+                            lastRobotMessage.removeChild(indicator);
+                        }
+                    };
+                }
+
+                // 开始播放
+                source.start(0);
+
+            } catch (e) {
+                console.error('音频播放错误:', e);
+            }
+        }
+
+        // 添加消息到聊天窗口
+        function addMessage(text, sender) {
+            if (!text) {
+                console.warn('尝试添加空消息');
+                return;
+            }
+
+            const messageDiv = document.createElement('div');
+
+            if (sender === 'user') {
+                messageDiv.className = 'message user-message';
+                messageDiv.innerHTML = `
+                    ${text}
+                    <div class="message-time">${formatTime(new Date())}</div>
+                    <div class="message-avatar user-avatar">我</div>
+                `;
+            } else if (sender === 'robot') {
+                messageDiv.className = 'message robot-message';
+                messageDiv.innerHTML = `
+                    ${text}
+                    <div class="message-time">${formatTime(new Date())}</div>
+                    <div class="message-avatar robot-avatar">AI</div>
+                `;
+            } else if (sender === 'transcription') {
+                messageDiv.className = 'message transcription-message';
+                messageDiv.innerHTML = `
+                    <i>识别结果:</i> ${text}
+                    <div class="message-time">${formatTime(new Date())}</div>
+                `;
+            } else if (sender === 'error') {
+                messageDiv.className = 'message error-message';
+                messageDiv.textContent = text;
+            } else if (sender === 'system') {
+                messageDiv.className = 'message system-message';
+                messageDiv.textContent = text;
+            }
+
+            chatContainer.appendChild(messageDiv);
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+        }
+
+        // 格式化时间
+        function formatTime(date) {
+            return `${padZero(date.getHours())}:${padZero(date.getMinutes())}:${padZero(date.getSeconds())}`;
+        }
+
+        // 数字补零
+        function padZero(num) {
+            return num < 10 ? '0' + num : num;
+        }
+
+        // 事件监听器
+        startBtn.addEventListener('click', function () {
+            startRecording();
+        });
+
+        stopBtn.addEventListener('click', stopRecording);
+        resetBtn.addEventListener('click', resetSession);
+
+        sendTextBtn.addEventListener('click', sendTextMessage);
+        textInput.addEventListener('keypress', function (e) {
+            if (e.key === 'Enter') {
+                sendTextMessage();
+            }
+        });
+
+        // 页面可见性变化监听
+        document.addEventListener('visibilitychange', function () {
+            if (document.visibilityState === 'visible') {
+                // 页面变为可见时，检查连接状态
+                console.log('页面变为可见，检查连接状态');
+                reconnectIfNeeded();
+            }
+        });
+
+        // 监听网络状态变化
+        window.addEventListener('online', function () {
+            console.log('网络已连接，尝试重连WebSocket');
+            reconnectIfNeeded();
+        });
+
+        // 页面加载时连接WebSocket，但只连接一次
+        window.addEventListener('load', function () {
+            console.log('页面加载完成，初始化WebSocket连接');
+            connectWebSocket();
+        });
+
+        // 页面关闭前清理资源
+        window.addEventListener('beforeunload', function () {
+            // 停止心跳
+            stopHeartbeat();
+
+            // 关闭WebSocket连接
+            if (websocket) {
+                websocket.close(1000, "页面关闭");
+            }
+        });
+    </script>
+</body>
+
+</html>
