@@ -1,6 +1,7 @@
 package com.robotplatform.service.dify;
 
 
+import com.alibaba.fastjson2.JSON;
 import com.robotplatform.service.dify.api.appinit.ParametersApi;
 import com.robotplatform.service.dify.api.appinit.ParametersReponse;
 import com.robotplatform.service.dify.api.chatmessge.ChatMessageApi;
@@ -9,6 +10,8 @@ import com.robotplatform.service.dify.api.conversations.*;
 
 import com.robotplatform.service.dify.api.upload.FileUploadApi;
 import com.robotplatform.service.dify.api.upload.FileUploadResponse;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.web.multipart.MultipartFile;
 import jakarta.annotation.Resource;
 
@@ -25,6 +28,9 @@ import java.util.Map;
 
 @Component
 public class DifyApiManager {
+
+    private static Logger logger = LoggerFactory.getLogger(DifyApiManager.class);
+
     private final Map<String, String> scenarioApiKeys = new HashMap<>();
 
     @Resource
@@ -97,13 +103,14 @@ public class DifyApiManager {
      * @throws IOException 如果API调用失败
      */
     public ChatMessageResponse sendMessageByChatMessageResponse(String scenario, String query, String userId, String conversationId) throws IOException {
+        logger.warn("sendMessageByChatMessageResponse,query:{},userId:{},conversationId:{}",query,userId,conversationId);
         ChatMessageResponse response;
         if (conversationId == null || conversationId.isEmpty()) {
             response = chatMessageApi.startConversation(query, userId);
         } else {
             response = chatMessageApi.continueConversation(query, conversationId, userId);
         }
-
+        logger.warn("sendMessageByChatMessageResponse response:{}", JSON.toJSONString(response));
         // 将ChatMessageResponse转换为DiagnosisDTO
         return response;
     }

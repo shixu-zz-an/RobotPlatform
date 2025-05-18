@@ -1,5 +1,7 @@
 package com.robotplatform.service.dify.api.chatmessge;
 
+import com.alibaba.fastjson2.annotation.JSONField;
+
 import java.util.List;
 import java.util.Map;
 
@@ -10,6 +12,7 @@ public class ChatMessageRequest {
     private Map<String, Object> inputs;
     private String query;
     private String responseMode;
+    @JSONField(name = "conversation_id")
     private String conversationId;
     private String user;
     private List<FileInfo> files;

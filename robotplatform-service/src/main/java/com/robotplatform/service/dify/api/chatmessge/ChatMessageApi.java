@@ -78,6 +78,7 @@ public class ChatMessageApi {
         if (userId != null && !userId.isEmpty()) {
             request.setUser(userId);
         }
+        request.setConversationId("");
         return sendChatMessage(request);
     }
 

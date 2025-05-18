@@ -1,0 +1,100 @@
+target/
+generated/
+!.mvn/wrapper/maven-wrapper.jar
+
+### STS ###
+.apt_generated
+.classpath
+.factorypath
+.project
+.settings
+.springBeans
+
+### IntelliJ IDEA ###
+.idea
+*.iws
+*.iml
+*.ipr
+*rebel.xml
+
+### NetBeans ###
+nbproject/private/
+build/
+nbbuild/
+dist/
+nbdist/
+
+### Mac OS ###
+.DS_Store
+
+### autoconfig
+antx.properties
+/automation/
+
+localtest/
+
+*.log
+*.log.gz
+
+application-local.properties
+*rebel.xml
+
+D:/
+static.admin-ui.node_modules/
+HELP.md
+target/
+!.mvn/wrapper/maven-wrapper.jar
+!**/src/main/**/target/
+!**/src/test/**/target/
+
+### STS ###
+.apt_generated
+.classpath
+.factorypath
+.project
+.settings
+.springBeans
+.sts4-cache
+
+### IntelliJ IDEA ###
+.idea
+*.iws
+*.iml
+*.ipr
+
+### NetBeans ###
+/nbproject/private/
+/nbbuild/
+/dist/
+/nbdist/
+/.nb-gradle/
+build/
+!**/src/main/**/build/
+!**/src/test/**/build/
+
+### VS Code ###
+.vscode/
+
+### Frontend ###
+# dependencies
+src/main/resources/static/admin-ui/node_modules
+src/main/resources/static/admin-ui/.pnp
+src/main/resources/static/admin-ui/.pnp.js
+
+# testing
+src/main/resources/static/admin-ui/coverage
+
+# production build
+src/main/resources/static/admin
+
+# misc
+src/main/resources/static/admin-ui/.DS_Store
+src/main/resources/static/admin-ui/.env.local
+src/main/resources/static/admin-ui/.env.development.local
+src/main/resources/static/admin-ui/.env.test.local
+src/main/resources/static/admin-ui/.env.production.local
+
+src/main/resources/static/admin-ui/npm-debug.log*
+src/main/resources/static/admin-ui/yarn-debug.log*
+src/main/resources/static/admin-ui/yarn-error.log*
+

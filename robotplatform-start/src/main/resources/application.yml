@@ -32,5 +32,5 @@ robotplatform:
       seconds: 60
   dify:
     api:
-      base-url: http://100.67.201.54:8088/v1
-      default-key: app-GrHXxOoa3Q7Mz4ZOlkg3OWpv
+      base-url: https://dify.aipromaker.cn/v1
+      default-key: app-xrRJLyVs3iqDEldmFr9FHglT

@@ -2,9 +2,12 @@ package com.robotplatform.service.impl;
 
 import com.robotplatform.client.model.VoiceMessage;
 import com.robotplatform.service.*;
+import com.robotplatform.service.dify.DifyApiManager;
+import com.robotplatform.service.dify.api.chatmessge.ChatMessageResponse;
 import com.robotplatform.service.external.funasr.TranscriptionListener;
 import com.robotplatform.service.external.funasr.TranscriptionResult;
 import io.micrometer.common.util.StringUtils;
+import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -51,6 +54,9 @@ public class VoiceDialogServiceImpl implements VoiceDialogService {
 
     @Autowired
     private UserService userService;
+
+    @Resource
+    private DifyApiManager difyApiManager;
 
     // 存储会话信息
     private final Map<String, SessionData> sessionDataMap = new ConcurrentHashMap<>();
@@ -309,9 +315,24 @@ public class VoiceDialogServiceImpl implements VoiceDialogService {
             // 直接处理文本输入
             log.info("处理文本消息, 会话ID: {}, 文本长度: {}", sessionId, text.length());
 
-            // 调用大语言模型生成回复
-            languageModelService.chatWithContextAsync(sessionId, text)
-                    .thenAccept(response -> generateAndSendSpeechResponse(sessionId, response));
+            // 获取会话数据
+            SessionData sessionData = sessionDataMap.get(sessionId);
+            if (sessionData == null) {
+                log.error("无法找到会话数据, 会话ID: {}", sessionId);
+                return;
+            }
+            
+            // 获取Dify会话ID，如果不存在则传入null创建新会话
+            String difyConversationId = sessionData.getDifyConversationId();
+            
+            // 调用Dify API处理消息并生成回复
+            ChatMessageResponse response = difyApiManager.sendMessageByChatMessageResponse("default", text, sessionId, difyConversationId);
+            
+            // 保存返回的会话ID供后续使用
+            sessionData.setDifyConversationId(response.getConversationId());
+            
+            // 生成并发送语音回复
+            generateAndSendSpeechResponse(sessionId, response.getAnswer());
         } catch (Exception e) {
             log.error("处理文本消息失败", e);
             sendErrorMessage(sessionId, "处理文本失败: " + e.getMessage());
@@ -324,7 +345,6 @@ public class VoiceDialogServiceImpl implements VoiceDialogService {
     private void handleTranscriptionResult(String sessionId, TranscriptionResult result) {
         try {
             String transcriptionText = result.getText();
-            //log.info("收到有效的语音转录结果, 会话ID: {}, 文本: {}", sessionId, transcriptionText);
             if (transcriptionText == null || transcriptionText.trim().isEmpty()) {
                 log.warn("收到空转录结果, 会话ID: {}", sessionId);
                 return;
@@ -339,28 +359,8 @@ public class VoiceDialogServiceImpl implements VoiceDialogService {
 
             // 处理标点符号
             transcriptionText = processPunctuation(sessionData, transcriptionText);
-
-            // 检查语音长度
-            if (transcriptionText.length() < 2) {
-                log.info("语音内容过短，忽略结果, 会话ID: {}", sessionId);
-                return;
-            }
-
-            // 检查是否包含触发词
-            if (!containsTriggerWord(transcriptionText)) {
-                log.info("未检测到触发词，忽略结果, 会话ID: {}", sessionId);
-                return;
-            }
-
-            // 优化用户输入
-            String optimizedPrompt = languageModelService.optimizeUserInput(transcriptionText);
-
-            log.info("用户输入优化, 原始输入: {}, 优化后: {}", transcriptionText, optimizedPrompt);
-           
-            if(StringUtils.isBlank(optimizedPrompt)){
-                log.info("优化后输入为空, 会话ID: {}", sessionId);
-                return;
-            }
+            
+            log.info("处理语音转录结果, 会话ID: {}, 文本: {}", sessionId, transcriptionText);
 
             // 发送转录结果给客户端
             VoiceMessage transcriptionMessage = VoiceMessage.builder()
@@ -376,8 +376,17 @@ public class VoiceDialogServiceImpl implements VoiceDialogService {
             // 将转录结果添加到会话历史
             sessionData.getHistory().add(transcriptionMessage);
            
-            languageModelService.chatWithContextAsync(sessionId, optimizedPrompt)
-                    .thenAccept(response -> generateAndSendSpeechResponse(sessionId, response));
+            // 获取Dify会话ID，如果不存在则传入null创建新会话
+            String difyConversationId = sessionData.getDifyConversationId();
+            
+            // 调用Dify API处理消息并生成回复
+            ChatMessageResponse response = difyApiManager.sendMessageByChatMessageResponse("default", transcriptionText, sessionId, difyConversationId);
+            
+            // 保存返回的会话ID供后续使用
+            sessionData.setDifyConversationId(response.getConversationId());
+            
+            // 生成并发送语音回复
+            generateAndSendSpeechResponse(sessionId, response.getAnswer());
         } catch (Exception e) {
             log.error("处理语音识别结果失败", e);
             sendErrorMessage(sessionId, "处理转录结果失败: " + e.getMessage());
@@ -591,6 +600,7 @@ public class VoiceDialogServiceImpl implements VoiceDialogService {
         private ByteArrayOutputStream audioBuffer;  // 添加音频缓冲区
         private String currentAudioFile;  // 当前音频文件路径
         private String lastTranscriptionText; // 添加上一次转录文本
+        private String difyConversationId; // 存储Dify API的会话ID
 
         public String getSessionId() {
             return sessionId;
@@ -645,6 +655,14 @@ public class VoiceDialogServiceImpl implements VoiceDialogService {
 
         public void setLastTranscriptionText(String lastTranscriptionText) {
             this.lastTranscriptionText = lastTranscriptionText;
+        }
+        
+        public String getDifyConversationId() {
+            return difyConversationId;
+        }
+        
+        public void setDifyConversationId(String difyConversationId) {
+            this.difyConversationId = difyConversationId;
         }
     }
 
