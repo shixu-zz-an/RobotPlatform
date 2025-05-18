@@ -66,6 +66,7 @@ public class VoiceDialogServiceImpl implements VoiceDialogService {
 
     @Override
     public void processVoiceMessage(VoiceMessage voiceMessage, Consumer<VoiceMessage> responseCallback) {
+
         String sessionId = voiceMessage.getSessionId();
         //log.info("处理语音消息, 会话ID: {}, 消息类型: {}", sessionId, voiceMessage.getType());
 
@@ -291,8 +292,6 @@ public class VoiceDialogServiceImpl implements VoiceDialogService {
             // 解码Base64音频数据
             byte[] audioData = Base64.getDecoder().decode(voiceMessage.getAudioData().getBytes(StandardCharsets.UTF_8));
 
-            // 保存音频数据为WAV文件
-            saveAudioToWav(sessionId, audioData);
             // 发送音频数据进行识别
             speechToTextService.sendAudioData(sessionData.getAsrSessionId(), audioData);
         } catch (Exception e) {
@@ -356,37 +355,73 @@ public class VoiceDialogServiceImpl implements VoiceDialogService {
                 log.error("无法找到会话数据, 会话ID: {}", sessionId);
                 return;
             }
+            
+            // 更新最后一次转录时间
+            sessionData.lastTranscriptionTime = System.currentTimeMillis();
+            
+            // 如果是实时转录结果（online模式）
+            if (Boolean.TRUE.equals(result.getRealtime())) {
+                // 标记用户正在说话
+                sessionData.isSpeaking = true;
+                
+                // 更新实时转录缓冲区
+                sessionData.realtimeTranscriptionBuffer.setLength(0);
+                sessionData.realtimeTranscriptionBuffer.append(transcriptionText);
+                
+                // 更新最后一次实时转录时间
+                sessionData.lastOnlineTranscriptionTime = System.currentTimeMillis();
+//
+//                // 发送实时转录结果给客户端显示，但标记为非最终结果
+//                VoiceMessage realtimeMessage = VoiceMessage.builder()
+//                        .sessionId(sessionId)
+//                        .type("transcription")
+//                        .text(transcriptionText)
+//                        .timestamp(System.currentTimeMillis())
+//                        .isFinal(false)
+//                        .build();
+//
+//                sendResponseToClient(sessionId, realtimeMessage);
+                return; // 实时结果不进一步处理
+            }
+            
+            // 如果是离线转录结果（offline模式）
+            if (Boolean.TRUE.equals(result.getIsFinal())) {
+                // 处理标点符号
+                transcriptionText = processPunctuation(sessionData, transcriptionText);
+                
+                log.info("收到离线转录结果, 会话ID: {}, 文本: {}", sessionId, transcriptionText);
+                
+                // 更新最后一次离线转录时间
+                sessionData.lastOfflineTranscriptionTime = System.currentTimeMillis();
+                
+                // 将离线转录结果添加到缓冲区
+                sessionData.offlineTranscriptionBuffer.add(transcriptionText);
 
-            // 处理标点符号
-            transcriptionText = processPunctuation(sessionData, transcriptionText);
-            
-            log.info("处理语音转录结果, 会话ID: {}, 文本: {}", sessionId, transcriptionText);
+                // 生成缓冲区内容的完整文本（用于显示）
+                StringBuilder fullBuffer = new StringBuilder();
+                for (String text : sessionData.offlineTranscriptionBuffer) {
+                    if (fullBuffer.length() > 0) {
+                        fullBuffer.append(" ");
+                    }
+                    fullBuffer.append(text);
+                }
 
-            // 发送转录结果给客户端
-            VoiceMessage transcriptionMessage = VoiceMessage.builder()
-                    .sessionId(sessionId)
-                    .type("transcription")
-                    .text(transcriptionText)
-                    .timestamp(System.currentTimeMillis())
-                    .isFinal(true)
-                    .build();
+                // 发送离线转录结果给客户端显示（注意：显示缓冲区的所有数据）
+                VoiceMessage transcriptionMessage = VoiceMessage.builder()
+                        .sessionId(sessionId)
+                        .type("transcription")
+                        .text(fullBuffer.toString())
+                        .timestamp(System.currentTimeMillis())
+                        .isFinal(true)
+                        .build();
 
-            sendResponseToClient(sessionId, transcriptionMessage);
-             
-            // 将转录结果添加到会话历史
-            sessionData.getHistory().add(transcriptionMessage);
-           
-            // 获取Dify会话ID，如果不存在则传入null创建新会话
-            String difyConversationId = sessionData.getDifyConversationId();
-            
-            // 调用Dify API处理消息并生成回复
-            ChatMessageResponse response = difyApiManager.sendMessageByChatMessageResponse("default", transcriptionText, sessionId, difyConversationId);
-            
-            // 保存返回的会话ID供后续使用
-            sessionData.setDifyConversationId(response.getConversationId());
-            
-            // 生成并发送语音回复
-            generateAndSendSpeechResponse(sessionId, response.getAnswer());
+                sendResponseToClient(sessionId, transcriptionMessage);
+                 
+                // 将转录结果添加到会话历史
+//                sessionData.getHistory().add(transcriptionMessage);
+                // 如果离线结果后没有实时数据回来，则在定时任务中处理
+                // 在checkSpeechActivity方法中实现延时处理逻辑
+            }
         } catch (Exception e) {
             log.error("处理语音识别结果失败", e);
             sendErrorMessage(sessionId, "处理转录结果失败: " + e.getMessage());
@@ -595,12 +630,22 @@ public class VoiceDialogServiceImpl implements VoiceDialogService {
     private static class SessionData {
         private String sessionId;
         private String asrSessionId;
-        private List<VoiceMessage> history;
+        private List<VoiceMessage> history = new ArrayList<>();
         private long createdAt;
-        private ByteArrayOutputStream audioBuffer;  // 添加音频缓冲区
+        private ByteArrayOutputStream audioBuffer;  // 音频缓冲区
         private String currentAudioFile;  // 当前音频文件路径
-        private String lastTranscriptionText; // 添加上一次转录文本
+        private String lastTranscriptionText; // 上一次转录文本
         private String difyConversationId; // 存储Dify API的会话ID
+        
+        // 实时转录相关字段
+        private StringBuilder realtimeTranscriptionBuffer = new StringBuilder(); // 实时转录结果缓冲区
+        private long lastTranscriptionTime = 0; // 最后一次转录结果的时间
+        private boolean isSpeaking = false; // 用户是否正在说话
+        
+        // 离线转录缓冲相关字段
+        private List<String> offlineTranscriptionBuffer = new ArrayList<>(); // 离线转录结果缓冲区
+        private long lastOfflineTranscriptionTime = 0; // 最后一次离线转录结果的时间
+        private long lastOnlineTranscriptionTime = 0; // 最后一次实时转录结果的时间
 
         public String getSessionId() {
             return sessionId;
@@ -666,6 +711,90 @@ public class VoiceDialogServiceImpl implements VoiceDialogService {
         }
     }
 
+    /**
+     * 检查语音活动并处理离线转录结果
+     * 1. 如果有离线转录结果，则检查是否在一定时间内有新的实时转录结果
+     * 2. 如果超过2秒没有新的实时转录结果，则将缓冲区中的所有离线转录结果合并并发送给大模型
+     */
+    @Scheduled(fixedRate = 500) // 每500毫秒检查一次
+    public void checkSpeechActivity() {
+        // 添加调试日志，验证定时任务是否正在执行
+//        log.debug("执行语音活动检查任务，时间: {}", System.currentTimeMillis());
+        
+        long currentTime = System.currentTimeMillis();
+        long waitThreshold = 3000; // 离线转录后等待2秒没有新的实时转录结果则处理缓冲区
+        
+        for (Map.Entry<String, SessionData> entry : sessionDataMap.entrySet()) {
+            String sessionId = entry.getKey();
+            SessionData sessionData = entry.getValue();
+            
+            // 检查是否有离线转录结果在缓冲区中
+            if (!sessionData.offlineTranscriptionBuffer.isEmpty() && sessionData.lastOfflineTranscriptionTime > 0) {
+                // 如果最后一次实时转录结果时间晚于最后一次离线转录结果时间
+                // 说明离线转录后还有实时转录结果回来，用户可能还在说话
+                if (sessionData.lastOnlineTranscriptionTime > sessionData.lastOfflineTranscriptionTime) {
+                    // 用户还在说话，继续等待
+                    sessionData.isSpeaking = true;
+                    continue;
+                }
+                
+                // 如果超过等待阈值时间没有新的实时转录结果
+                if (currentTime - sessionData.lastOfflineTranscriptionTime > waitThreshold) {
+                    log.info("离线转录后{}ms没有新的实时转录结果，处理缓冲区中的离线转录结果, 会话ID: {}", 
+                            waitThreshold, sessionId);
+                    
+                    // 合并缓冲区中的所有离线转录结果
+                    StringBuilder mergedText = new StringBuilder();
+                    for (String text : sessionData.offlineTranscriptionBuffer) {
+                        if (mergedText.length() > 0) {
+                            mergedText.append(" ");
+                        }
+                        mergedText.append(text);
+                    }
+                    
+                    String finalText = mergedText.toString();
+                    log.info("合并后的离线转录结果, 会话ID: {}, 文本: {}", sessionId, finalText);
+                    
+                    // 标记用户已停止说话
+                    sessionData.isSpeaking = false;
+                    
+                    // 获取Dify会话ID，如果不存在则传入null创建新会话
+                    String difyConversationId = sessionData.getDifyConversationId();
+                    
+                    try {
+                        // 调用Dify API处理消息并生成回复
+                        ChatMessageResponse response = difyApiManager.sendMessageByChatMessageResponse("default", finalText, sessionId, difyConversationId);
+                        
+                        // 保存返回的会话ID供后续使用
+                        sessionData.setDifyConversationId(response.getConversationId());
+                        
+                        // 生成并发送语音回复
+                        generateAndSendSpeechResponse(sessionId, response.getAnswer());
+                    } catch (Exception e) {
+                        log.error("处理离线转录结果失败", e);
+                        sendErrorMessage(sessionId, "处理转录结果失败: " + e.getMessage());
+                    }
+                    
+                    // 清空缓冲区
+                    sessionData.offlineTranscriptionBuffer.clear();
+                    sessionData.lastOfflineTranscriptionTime = 0;
+                    sessionData.lastOnlineTranscriptionTime = 0;
+                }
+            }
+            
+            // 检查实时转录活动
+            if (sessionData.isSpeaking && sessionData.lastTranscriptionTime > 0) {
+                // 如果超过静音阈值时间没有新的转录结果
+                if (currentTime - sessionData.lastTranscriptionTime > 3000) { // 设置为3秒，比离线转录等待时间长
+                    log.info("长时间没有转录结果，重置说话状态, 会话ID: {}", sessionId);
+                    sessionData.isSpeaking = false;
+                    sessionData.realtimeTranscriptionBuffer.setLength(0);
+                    sessionData.lastTranscriptionTime = 0;
+                }
+            }
+        }
+    }
+    
     @Scheduled(cron = "0 0 2 * * ?") // 每天凌晨2点执行
     public void cleanupOldAudioFiles() {
         try {

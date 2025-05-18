@@ -27,4 +27,14 @@ public class TranscriptionResult {
      * 转录模式
      */
     private String mode;
+    
+    /**
+     * 是否为实时转录结果
+     */
+    private Boolean realtime = false;
+    
+    /**
+     * 是否为最终结果
+     */
+    private Boolean isFinal = false;
 } 

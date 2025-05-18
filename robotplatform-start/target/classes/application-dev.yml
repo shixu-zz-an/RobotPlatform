@@ -30,4 +30,10 @@ robotplatform:
     timeout:
       seconds: 60
   audio:
-    save-dir: audio_records  # 音频文件保存目录      
+    save-dir: audio_records  # 音频文件保存目录
+      
+  # Dify API配置
+  dify:
+    api:
+      base-url: https://dify.aipromaker.cn/v1
+      default-key: app-xrRJLyVs3iqDEldmFr9FHglT

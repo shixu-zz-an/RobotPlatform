@@ -190,15 +190,23 @@ public class FunasrClient {
 
             try {
                 JSONObject json = JSONObject.parseObject(payload);
-
-                // 模式过滤逻辑
-                if ("2pass-offline".equals(json.getString("mode"))) {
-                    log.debug("收到FunASR消息, mode={}, text={}", json.getString("mode"), json.getString("text"));
+                String mode = json.getString("mode");
+                String text = json.getString("text");
+                
+                // 处理所有转录模式
+                if (text != null && !text.trim().isEmpty()) {
+                    log.debug("收到FunASR消息, mode={}, text={}", mode, text);
+                    
                     TranscriptionResult result = new TranscriptionResult();
-                    result.setText(json.getString("text"));
-                    result.setMode(json.getString("mode"));
+                    result.setText(text);
+                    result.setMode(mode);
                     result.setSpeakerId("speaker1");
                     result.setTimeStamp(System.currentTimeMillis());
+                    
+                    // 根据模式设置实时和最终标志
+                    result.setRealtime("2pass-online".equals(mode) || "online".equals(mode));
+                    result.setIsFinal("2pass-offline".equals(mode));
+                    
                     listener.onTranscriptionResult(result);
                 }
             } catch (Exception e) {

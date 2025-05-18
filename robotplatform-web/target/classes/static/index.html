@@ -274,7 +274,8 @@
         };
 
         // 缓冲区大小
-        const CHUNK_SIZE = 1924;  // 每次发送的数据块大小
+        const CHUNK_SIZE = 960;  // 每次发送的数据块大小，减小以提高响应速度
+        const MAX_BUFFER_TIME = 100; // 最大缓冲时间（毫秒），从200ms减少到100ms，加快发送频率
 
         // 全局音频流式播放变量
         let audioContext = null;
@@ -404,7 +405,7 @@
                 };
 
                 websocket.onmessage = function (event) {
-                    console.log('收到WebSocket消息:', event.data);
+                    //  console.log('收到WebSocket消息:', event.data);
                     try {
                         const message = JSON.parse(event.data);
 
@@ -459,23 +460,35 @@
 
         // 处理WebSocket消息
         function handleWebSocketMessage(message) {
-            console.log('处理消息:', message);
+            const startTime = performance.now();
+            console.log('[WebSocket消息] 收到消息类型:', message.type);
 
             if (message.type === 'text') {
-                addMessage(message.text, 'robot'); // 只渲染一次文本
+                console.log('[WebSocket消息] 收到文本消息, 长度:', message.text ? message.text.length : 0);
+                const renderStart = performance.now();
+                addMessage(message.text, 'robot');
+                console.log('[WebSocket消息] 渲染文本消息耗时:', (performance.now() - renderStart).toFixed(2) + 'ms');
             } else if (message.type === 'audio') {
-                playPcmChunk(message.audioData); // 只做流式播放，不渲染文本
+                console.log('[WebSocket消息] 收到音频数据, 长度:', message.audioData ? message.audioData.length : 0);
+                const processStart = performance.now();
+                playPcmChunk(message.audioData);
+                console.log('[WebSocket消息] 处理音频数据耗时:', (performance.now() - processStart).toFixed(2) + 'ms');
             } else if (message.type === 'transcription') {
+                console.log('[WebSocket消息] 收到转录消息, 文本:', message.text);
+                const renderStart = performance.now();
                 addMessage(message.text, 'transcription');
+                console.log('[WebSocket消息] 渲染转录消息耗时:', (performance.now() - renderStart).toFixed(2) + 'ms');
             } else if (message.type === 'error') {
+                console.log('[WebSocket消息] 收到错误消息:', message.errorMessage);
                 addMessage(message.errorMessage || "未知错误", 'error');
             } else {
-                console.warn('未知消息类型:', message.type);
-                console.warn('未知消息类型:', JSON.stringify(message));
+                console.warn('[WebSocket消息] 未知消息类型:', message.type);
+                console.warn('[WebSocket消息] 未知消息内容:', JSON.stringify(message));
             }
 
             // 处理完成后更新状态
             statusEl.textContent = "已连接";
+            console.log('[WebSocket消息] 总处理耗时:', (performance.now() - startTime).toFixed(2) + 'ms');
         }
 
         function initAudioContext() {
@@ -486,42 +499,82 @@
 
         function playPcmChunk(base64Audio) {
             if (!base64Audio) return;
+            
+            // 记录开始时间
+            const startTime = performance.now();
+            console.log("[音频处理] 开始处理音频数据");
+            
             initAudioContext();
+            console.log("[音频处理] AudioContext初始化耗时: " + (performance.now() - startTime).toFixed(2) + "ms");
+            
+            const decodeStart = performance.now();
             const binaryData = atob(base64Audio);
+            console.log("[音频处理] Base64解码耗时: " + (performance.now() - decodeStart).toFixed(2) + "ms");
+            
+            const bufferStart = performance.now();
             const arrayBuffer = new ArrayBuffer(binaryData.length);
             const uint8Array = new Uint8Array(arrayBuffer);
             for (let i = 0; i < binaryData.length; i++) {
                 uint8Array[i] = binaryData.charCodeAt(i);
             }
+            console.log("[音频处理] 创建Uint8Array耗时: " + (performance.now() - bufferStart).toFixed(2) + "ms");
+            
+            const convertStart = performance.now();
             const int16Array = new Int16Array(arrayBuffer);
             // 转成Float32
             const float32Array = new Float32Array(int16Array.length);
             for (let i = 0; i < int16Array.length; i++) {
                 float32Array[i] = int16Array[i] / 32768.0;
             }
+            console.log("[音频处理] 数据转换耗时: " + (performance.now() - convertStart).toFixed(2) + "ms");
+            
             audioQueue.push(float32Array);
+            
+            console.log("[音频处理] 总耗时: " + (performance.now() - startTime).toFixed(2) + "ms, 数据长度: " + float32Array.length);
+            
             if (!isPlaying) {
                 playNextChunk();
             }
         }
 
         function playNextChunk() {
+            const startTime = performance.now();
+            console.log("[音频播放] 开始播放下一块");
+            
             if (audioQueue.length === 0) {
+                console.log("[音频播放] 音频队列为空，停止播放");
                 isPlaying = false;
                 isAIPlaying = false;
                 return;
             }
+            
             isPlaying = true;
             isAIPlaying = true;
+            
             const chunk = audioQueue.shift();
+            console.log("[音频播放] 从队列中获取数据耗时: " + (performance.now() - startTime).toFixed(2) + "ms, 数据长度: " + chunk.length);
+            
+            const bufferStart = performance.now();
             const buffer = audioContext.createBuffer(1, chunk.length, 24000);
             buffer.copyToChannel(chunk, 0);
+            console.log("[音频播放] 创建音频缓冲区耗时: " + (performance.now() - bufferStart).toFixed(2) + "ms");
+            
+            const sourceStart = performance.now();
             const source = audioContext.createBufferSource();
             currentAudioSource = source; // 保存当前音频源引用
             source.buffer = buffer;
             source.connect(audioContext.destination);
-            source.onended = playNextChunk;
+            console.log("[音频播放] 创建音频源耗时: " + (performance.now() - sourceStart).toFixed(2) + "ms");
+            
+            source.onended = function() {
+                const endTime = performance.now();
+                console.log("[音频播放] 当前块播放完成，播放时长: " + ((endTime - startTime) / 1000).toFixed(2) + "s");
+                playNextChunk();
+            };
+            
+            console.log("[音频播放] 总准备耗时: " + (performance.now() - startTime).toFixed(2) + "ms");
             source.start();
+            console.log("[音频播放] 开始播放");
         }
 
         // 添加停止AI播放的函数
@@ -582,7 +635,7 @@
             try {
                 // 跳过特定消息类型的日志（如心跳包）
                 if (message.type !== 'ping') {
-                    console.log('发送消息:', JSON.stringify(message));
+                  //  console.log('发送消息:', JSON.stringify(message));
                 }
 
                 websocket.send(JSON.stringify(message));
@@ -600,24 +653,38 @@
 
         // 开始录音
         async function startRecording() {
+            const recordingStartTime = performance.now();
+            console.log('[录音过程] 开始录音');
+            
             // 如果AI正在播放，先停止播放
             if (isAIPlaying) {
+                const stopStart = performance.now();
                 stopAIPlayback();
+                console.log('[录音过程] 停止AI播放耗时: ' + (performance.now() - stopStart).toFixed(2) + 'ms');
                 addMessage("检测到用户开始说话，停止当前播放", "system");
             }
 
+            // 检查WebSocket连接
+            const wsCheckStart = performance.now();
             if (!websocket || websocket.readyState !== WebSocket.OPEN) {
+                console.log('[录音过程] WebSocket未连接，尝试连接');
                 connectWebSocket();
                 addMessage("正在连接服务器...", "system");
                 await new Promise(resolve => setTimeout(resolve, 1000));
 
                 if (!websocket || websocket.readyState !== WebSocket.OPEN) {
+                    console.log('[录音过程] WebSocket连接失败');
                     addMessage("连接服务器失败，请刷新页面重试", "error");
                     return;
                 }
             }
+            console.log('[录音过程] WebSocket连接检查耗时: ' + (performance.now() - wsCheckStart).toFixed(2) + 'ms');
+            
 
             try {
+                const mediaStartTime = performance.now();
+                console.log('[录音过程] 开始设置音频参数');
+                
                 // 设置音频参数
                 const audioConstraints = {
                     audio: {
@@ -628,61 +695,125 @@
                     }
                 };
 
+                console.log('[录音过程] 请求麦克风权限');
+                const streamStartTime = performance.now();
                 const stream = await navigator.mediaDevices.getUserMedia(audioConstraints);
+                console.log('[录音过程] 获取麦克风流耗时: ' + (performance.now() - streamStartTime).toFixed(2) + 'ms');
 
                 // 创建AudioContext和ScriptProcessor来处理音频数据
+                const contextStartTime = performance.now();
                 const audioContext = new (window.AudioContext || window.webkitAudioContext)({
                     sampleRate: AUDIO_CONFIG.sampleRate
                 });
                 const audioInput = audioContext.createMediaStreamSource(stream);
+                console.log('[录音过程] 创建AudioContext耗时: ' + (performance.now() - contextStartTime).toFixed(2) + 'ms');
 
                 // 创建处理器节点
-                const bufferSize = 4096;
+                const processorStartTime = performance.now();
+                const bufferSize = 1024; // 减小缓冲区大小，从4096减少到1024，使音频处理更频繁
                 const recorder = audioContext.createScriptProcessor(bufferSize, 1, 1);
+                console.log('[录音过程] 创建处理器节点耗时: ' + (performance.now() - processorStartTime).toFixed(2) + 'ms');
 
                 // 用于累积音频数据
                 let audioBuffer = new Float32Array(0);
+                
+                console.log('[录音过程] 音频设置总耗时: ' + (performance.now() - mediaStartTime).toFixed(2) + 'ms');
+                
 
+                // 添加时间戳跟踪
+                let lastSendTime = Date.now();
+                
+                // 添加处理计数器和总计时器
+                let processCount = 0;
+                const totalRecordingStartTime = performance.now();
+                
                 recorder.onaudioprocess = function (e) {
+                    const processStartTime = performance.now();
+                    processCount++;
+                    
                     // 获取音频数据
                     const buffer = e.inputBuffer.getChannelData(0);
+                    
+                    if (processCount % 10 === 0) {  // 每10次处理打印一次日志，减少日志量
+                        console.log(`[录音过程] 第${processCount}次音频处理，总运行时间: ${((performance.now() - totalRecordingStartTime)/1000).toFixed(2)}s`);
+                    }
 
                     // 将新的音频数据与先前的数据合并
+                    const mergeStartTime = performance.now();
                     const newBuffer = new Float32Array(audioBuffer.length + buffer.length);
                     newBuffer.set(audioBuffer);
                     newBuffer.set(buffer, audioBuffer.length);
-
-                    // 当累积的数据量超过阈值时发送
-                    if (newBuffer.length >= CHUNK_SIZE) {
-                        // 发送CHUNK_SIZE长度的数据
-                        const chunkToSend = newBuffer.slice(0, CHUNK_SIZE);
+                    
+                    if (processCount % 10 === 0) {
+                        console.log(`[录音过程] 缓冲区合并耗时: ${(performance.now() - mergeStartTime).toFixed(2)}ms`);
+                    }
+                    
+                    const currentTime = Date.now();
+                    const timeSinceLastSend = currentTime - lastSendTime;
+                    
+                    // 当累积的数据量超过阈值或者超过最大缓冲时间时发送
+                    if (newBuffer.length >= CHUNK_SIZE || (newBuffer.length > 0 && timeSinceLastSend >= MAX_BUFFER_TIME)) {
+                        const sendStartTime = performance.now();
+                        
+                        // 发送缓冲区中的所有数据
+                        const chunkSize = Math.min(newBuffer.length, CHUNK_SIZE);
+                        const chunkToSend = newBuffer.slice(0, chunkSize);
 
                         // 保留剩余的数据
-                        const remaining = newBuffer.slice(CHUNK_SIZE);
+                        const remaining = newBuffer.length > chunkSize ? newBuffer.slice(chunkSize) : new Float32Array(0);
 
+                        if (processCount % 10 === 0) {
+                            console.log(`[录音过程] 准备发送数据，长度: ${chunkSize}，耗时: ${(performance.now() - sendStartTime).toFixed(2)}ms`);
+                        }
+                        
                         // 将Float32数据转换为16位整数格式
-                        const pcmData = new Int16Array(CHUNK_SIZE);
-                        for (let i = 0; i < CHUNK_SIZE; i++) {
+                        const convertStartTime = performance.now();
+                        const pcmData = new Int16Array(chunkSize);
+                        for (let i = 0; i < chunkSize; i++) {
                             // 将-1.0 ~ 1.0的浮点数转换为-32768 ~ 32767的整数
                             const s = Math.max(-1, Math.min(1, chunkToSend[i]));
                             pcmData[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
                         }
+                        
+                        if (processCount % 10 === 0) {
+                            console.log(`[录音过程] 数据格式转换耗时: ${(performance.now() - convertStartTime).toFixed(2)}ms`);
+                        }
 
                         // 将Int16Array转换为Blob
+                        const blobStartTime = performance.now();
                         const wavBlob = new Blob([pcmData], { type: 'application/octet-stream' });
+                        
+                        if (processCount % 10 === 0) {
+                            console.log(`[录音过程] 创建Blob耗时: ${(performance.now() - blobStartTime).toFixed(2)}ms`);
+                        }
 
                         // 转换为Base64并发送
+                        const base64StartTime = performance.now();
                         const reader = new FileReader();
                         reader.readAsDataURL(wavBlob);
                         reader.onloadend = function () {
                             const base64data = reader.result.split(',')[1];
-
+                            
+                            if (processCount % 10 === 0) {
+                                console.log(`[录音过程] Base64编码耗时: ${(performance.now() - base64StartTime).toFixed(2)}ms`);
+                                console.log(`[录音过程] 发送音频数据，大小: ${base64data.length} 字节`);
+                            }
+                            
+                            const sendMessageStartTime = performance.now();
                             sendMessage({
                                 type: 'audio',
                                 audioData: base64data,
                                 sessionId: sessionId,
                                 timestamp: Date.now()
                             });
+                            
+                            if (processCount % 10 === 0) {
+                                console.log(`[录音过程] 发送WebSocket消息耗时: ${(performance.now() - sendMessageStartTime).toFixed(2)}ms`);
+                                console.log(`[录音过程] 总发送耗时: ${(performance.now() - sendStartTime).toFixed(2)}ms`);
+                            }
+                            
+                            // 更新最后发送时间
+                            lastSendTime = Date.now();
                         };
 
                         // 更新缓冲区为剩余数据
@@ -720,18 +851,27 @@
 
         // 停止录音
         function stopRecording() {
+            const stopStartTime = performance.now();
+            console.log('[录音过程] 开始停止录音');
+            
             if (mediaRecorder && mediaRecorder.isRecording) {
                 // 断开处理器节点
+                const disconnectStartTime = performance.now();
                 mediaRecorder.audioInput.disconnect();
                 mediaRecorder.recorder.disconnect();
+                console.log('[录音过程] 断开处理器节点耗时: ' + (performance.now() - disconnectStartTime).toFixed(2) + 'ms');
 
                 // 关闭音频上下文
+                const closeContextStartTime = performance.now();
                 if (mediaRecorder.audioContext.state !== 'closed') {
                     mediaRecorder.audioContext.close();
                 }
+                console.log('[录音过程] 关闭音频上下文耗时: ' + (performance.now() - closeContextStartTime).toFixed(2) + 'ms');
 
                 // 停止所有轨道
+                const stopTracksStartTime = performance.now();
                 mediaRecorder.stream.getTracks().forEach(track => track.stop());
+                console.log('[录音过程] 停止音频轨道耗时: ' + (performance.now() - stopTracksStartTime).toFixed(2) + 'ms');
 
                 // 更新状态
                 mediaRecorder.isRecording = false;
@@ -741,11 +881,14 @@
                 statusEl.innerHTML = "处理中... <span class='loading'></span>";
 
                 // 发送结束录音信号
+                const sendEndSignalStartTime = performance.now();
                 sendMessage({
                     type: 'end_audio',
                     sessionId: sessionId,
                     timestamp: Date.now()
                 });
+                console.log('[录音过程] 发送结束录音信号耗时: ' + (performance.now() - sendEndSignalStartTime).toFixed(2) + 'ms');
+                console.log('[录音过程] 停止录音总耗时: ' + (performance.now() - stopStartTime).toFixed(2) + 'ms');
             }
         }
 
