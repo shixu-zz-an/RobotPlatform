@@ -3,6 +3,8 @@ package com.robotplatform.service.external.funasr;
 import com.alibaba.fastjson2.JSONArray;
 import com.alibaba.fastjson2.JSONObject;
 import lombok.extern.slf4j.Slf4j;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.web.socket.BinaryMessage;
 import org.springframework.web.socket.TextMessage;
 import org.springframework.web.socket.WebSocketSession;
@@ -18,8 +20,9 @@ import java.util.concurrent.ExecutionException;
  * FunASR客户端
  * 负责与FunASR服务器的WebSocket通信
  */
-@Slf4j
 public class FunasrClient {
+
+    private static Logger logger= LoggerFactory.getLogger(FunasrClient.class);
 
 
     // 存储会话信息
@@ -47,9 +50,9 @@ public class FunasrClient {
             listeners.put(sessionId, listener);
             String initMsg = generateInitializationMessage(sessionId);
             webSocketSession.sendMessage(new TextMessage(initMsg));
-            log.info("创建FunASR连接成功, 会话ID: {}, 初始配置: {}", sessionId, initMsg);
+            logger.info("创建FunASR连接成功, 会话ID: {}, 初始配置: {}", sessionId, initMsg);
         } catch (Exception e) {
-            log.error("创建FunASR连接失败, 会话ID: {}", sessionId, e);
+            logger.error("创建FunASR连接失败, 会话ID: {}", sessionId, e);
             throw new RuntimeException("创建FunASR连接失败", e);
         }
         return sessionId;
@@ -70,7 +73,7 @@ public class FunasrClient {
             }
             webSocketSession.sendMessage(new BinaryMessage(audioData));
         } catch (IOException e) {
-            log.error("发送音频数据失败, 会话ID: {}", funasrSessionId, e);
+            logger.error("发送音频数据失败, 会话ID: {}", funasrSessionId, e);
             throw new RuntimeException("发送音频数据失败", e);
         }
     }
@@ -81,7 +84,7 @@ public class FunasrClient {
      * @param funasrSessionId 会话ID
      */
     private void reconnect(String funasrSessionId) {
-        log.info("重新连接FunASR, 会话ID: {}", funasrSessionId);
+        logger.info("重新连接FunASR, 会话ID: {}", funasrSessionId);
         createConnection(listeners.get(funasrSessionId));
     }
 
@@ -96,10 +99,10 @@ public class FunasrClient {
             if (webSocketSession != null && webSocketSession.isOpen()) {
                 webSocketSession.sendMessage(new TextMessage(generateEndMessage()));
                 webSocketSession.close();
-                log.info("关闭FunASR连接, 会话ID: {}", funasrSessionId);
+                logger.info("关闭FunASR连接, 会话ID: {}", funasrSessionId);
             }
         } catch (IOException e) {
-            log.error("关闭FunASR连接失败, 会话ID: {}", funasrSessionId, e);
+            logger.error("关闭FunASR连接失败, 会话ID: {}", funasrSessionId, e);
         }
         webSocketSessions.remove(funasrSessionId);
         listeners.remove(funasrSessionId);
@@ -115,7 +118,7 @@ public class FunasrClient {
                     session.sendMessage(new TextMessage("{\"type\":\"heartbeat\"}"));
                     //log.debug("发送心跳包, 会话ID: {}", sessionId);
                 } catch (IOException e) {
-                    log.error("发送心跳包失败, 会话ID: {}", sessionId, e);
+                    logger.error("发送心跳包失败, 会话ID: {}", sessionId, e);
                 }
             }
         });
@@ -195,7 +198,7 @@ public class FunasrClient {
                 
                 // 处理所有转录模式
                 if (text != null && !text.trim().isEmpty()) {
-                    log.debug("收到FunASR消息, mode={}, text={}", mode, text);
+                    logger.debug("收到FunASR消息, mode={}, text={}", mode, text);
                     
                     TranscriptionResult result = new TranscriptionResult();
                     result.setText(text);
@@ -210,7 +213,7 @@ public class FunasrClient {
                     listener.onTranscriptionResult(result);
                 }
             } catch (Exception e) {
-                log.error("解析FunASR转录结果失败", e);
+                logger.error("解析FunASR转录结果失败", e);
             }
         }
     }

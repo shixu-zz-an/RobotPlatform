@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>RobotPlatform语音对话</title>
+    <title>通用机器人</title>
     <style>
         body {
             font-family: 'Arial', sans-serif;
@@ -223,13 +223,13 @@
 </head>
 
 <body>
-    <h1>RobotPlatform语音对话</h1>
+    <h1>通用机器人对话</h1>
 
     <div class="session-info" id="sessionInfo"></div>
 
     <div class="chat-container" id="chatContainer">
         <div class="message robot-message">
-            您好，我是RobotPlatform，请点击下方按钮开始语音对话。
+            您好，我是通用机器人对话，请点击下方按钮开始语音对话。
             <div class="message-avatar robot-avatar">AI</div>
         </div>
     </div>
@@ -275,7 +275,7 @@
 
         // 缓冲区大小
         const CHUNK_SIZE = 960;  // 每次发送的数据块大小，减小以提高响应速度
-        const MAX_BUFFER_TIME = 100; // 最大缓冲时间（毫秒），从200ms减少到100ms，加快发送频率
+        const MAX_BUFFER_TIME = 50; // 最大缓冲时间（毫秒），从200ms减少到100ms，加快发送频率
 
         // 全局音频流式播放变量
         let audioContext = null;
@@ -710,7 +710,7 @@
 
                 // 创建处理器节点
                 const processorStartTime = performance.now();
-                const bufferSize = 1024; // 减小缓冲区大小，从4096减少到1024，使音频处理更频繁
+                const bufferSize = 512; // 减小缓冲区大小，从4096减少到1024，使音频处理更频繁
                 const recorder = audioContext.createScriptProcessor(bufferSize, 1, 1);
                 console.log('[录音过程] 创建处理器节点耗时: ' + (performance.now() - processorStartTime).toFixed(2) + 'ms');
 
